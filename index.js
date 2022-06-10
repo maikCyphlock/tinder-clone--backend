@@ -69,35 +69,141 @@ APP.post("/login", async (req, res) => {
         expiresIn: 60 * 168,
       });
       res.status(201).json({ token, userId: user.user_id, email });
-    }else{
-        res
-      .status(400)
-      .json({ message: "Invalid Credentials, please Check the information" });
+    } else {
+      res
+        .status(400)
+        .json({ message: "Invalid Credentials, please Check the information" });
     }
-    
   } catch (error) {
-      
     return res.status(400).json({ message: error.message });
   } finally {
     await client.close();
   }
 });
 
-APP.get("/users", async (req, res) => {
-  const client = new MongoClient(uri, { useNewUrlParser: true });
+// Update a User in the Database
+APP.put("/user", async (req, res) => {
+  const client = new MongoClient(uri);
+  const { formData } = req.body;
 
+  try {
+    await client.connect();
+    const database = client.db("app-data");
+    const users = database.collection("users");
+
+    const query = { user_id: formData.user_id };
+
+    const updateDocument = {
+      $set: {
+        first_name: formData.first_name,
+        dob_day: formData.dob_day,
+        dob_month: formData.dob_month,
+        dob_year: formData.dob_year,
+        show_gender: formData.show_gender,
+        gender_identity: formData.gender_identity,
+        gender_interest: formData.gender_interest,
+        url: formData.url,
+        about: formData.about,
+        matches: formData.matches,
+      },
+    };
+
+    const insertedUser = await users.updateOne(query, updateDocument);
+
+    res.json(insertedUser);
+  } finally {
+    await client.close();
+  }
+});
+
+APP.get("/user", async (req, res) => {
+  const client = new MongoClient(uri, { useNewUrlParser: true });
+  const userId = req.query.userId;
+
+  // console.log(userId);
+  try {
+    await client.connect();
+    const database = client.db("app-data");
+    const users = database.collection("users");
+    const query = { user_id: userId };
+    // console.log("query", query);
+    const user = await users.findOne(query);
+    // console.log(user);
+    res.json(user);
+  } finally {
+    await client.close();
+  }
+});
+
+APP.get("/gendered-users", async (req, res) => {
+  const client = new MongoClient(uri, { useNewUrlParser: true });
+  const { gender } = req.query;
   try {
     await client.connect();
 
     const database = client.db("app-data");
     const users = database.collection("users");
+    const query = { gender_identity: { $eq: "man" } };
 
-    const returnedUsers = await users.find().toArray();
-    res.send(returnedUsers);
+    const foundUsers = await users.find(query).toArray();
+    res.send(foundUsers);
   } finally {
     await client.close();
   }
 });
+
+APP.put("/addmatch", async (req, res) => {
+  const client = new MongoClient(uri, { useNewUrlParser: true });
+  const { UserId, matchedUserId } = req.body;
+  try {
+    await client.connect();
+    const database = client.db("app-data");
+    const users = database.collection("users");
+
+    const query = { user_id: UserId };
+
+    
+    const updateDocument = {
+      $push: { matches: { user_id: matchedUserId } },
+    };
+    const user = await users.updateOne(query,updateDocument);
+    res.send(user)
+  } catch (error) {
+    console.error(error);
+  } finally {
+    await client.close()
+  }
+});
+
+APP.get('/users', async (req,res) => {
+  const client = new MongoClient(uri, { useNewUrlParser: true });
+  const UserIds = JSON.parse(req.query.userIds)
+  console.log(UserIds);
+
+  try {
+    await client.connect()
+    const database = client.db('app-data')
+    const users  =  database.collection('users')
+
+    const pipeline = [
+      {
+        $match:{
+          'user_id':{
+            '$in': UserIds
+          }
+        }
+      }
+    ]
+
+    const foundUsers = await users.aggregate(pipeline).toArray();
+    res.send(foundUsers)
+
+  } catch (error) {
+    console.error(error);
+  }finally {
+    await client.close()
+  }
+})
 
 APP.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
